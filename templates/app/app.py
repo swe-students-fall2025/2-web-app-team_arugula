@@ -3,10 +3,12 @@ import json
 import datetime
 import logging
 from flask_pymongo import PyMongo
+from pymongo import MongoClient
 from bson import ObjectId
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_login import UserMixin, LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv, dotenv_values
 
 
@@ -32,31 +34,60 @@ photos_collection = db["photos"]
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-    
-@login_manager.user_loader
-def load_user(user_id):
-    user_data = users.find_one({"_id": ObjectId(user_id)})
-    if user_data:
-        return User(user_data)
-    return None
+
 class User(UserMixin):
     def __init__(self, user_data):
         self.user_data = user_data
         self.id = str(user_data['_id'])
         self.username = user_data['username']
         self.email = user_data['email']
-        self.created_at = user_data.get('created_at', datetime.utcnow())
+        
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = users.find_one({"_id": ObjectId(user_id)})
+    if user_data:
+        return User(user_data)
+    return None
+
+def load_username(username):
+    user_data = users.find_one({"username": username})
+    if user_data:
+        return User(user_data)
+    return None
 
 # get the home page
 @app.route("/")
-    def home():
-        docs = db.messages.find({}).sort("created_at", -1)
-        return render_template("home.html", docs=docs)
+def home():
+    docs = db.messages.find({}).sort("created_at", -1)
+    return render_template("home.html", docs=docs)
 
 # get the username and password from login.html
 # check if it's the right combination in the MongoDB database
 # if yes, then login is successful, take user to home.html
 # if not (either username or password is incorrect), user stays on login.html, tell user to try again
+
+@app.route("/register", methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        email = request.form['email']
+        password = request.form['password']
+        password_hash = generate_password_hash(password)
+        
+        user_data = users_collection.find_one({'username': username})
+        if user_data:
+            flash("Oopsie poopsie! :( That username's taken!")
+            return redirect(url_for('register'))
+        record = users_collection.insert_one({
+            "username": username,
+            "email": email,
+            "password_hash": password_hash,
+            "created_at": datetime.datetime.utcnow()
+        })
+        user = User(record.inserted_id)
+        login_user(user)
+        return redirect(url_for('home'))
+    return render_template('login.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -70,8 +101,9 @@ def login():
             login_user(user)
             return redirect(url_for('home'))
         else:
-            return "Oopsie poopsie! :( Incorrect username or password (or both!)"
-        return render_template('login.html')
+            flash("Oopsie poopsie! :( Incorrect username or password (or both!)")
+            return redirect(url_for('login'))
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required
@@ -85,20 +117,23 @@ def logout():
 # your home page has your "Welcome [username]!", profile picture, and a gallery of pictures of plants/animals you took
 # Write python code to get photos you have posted, and for your feed page, get photos that your friends have posted
 # Get images from MongoDB, display them with HTML and CSS
-
-    # let a client add data to database like photos, then return them to the home page
-    @app.route("/create", methods=["POST"])
-    def create_post():
-        name = request.form["fname"]
-        message = request.form["fmessage"]
+@app.route("/profile", methods=['GET', 'POST])
+@login_required
+def profile():
+                                
+# let a client add data to database like photos, then return them to the home page
+@app.route("/create", methods=["POST"])
+def create_post():
+    name = request.form["fname"]
+    message = request.form["fmessage"]
         
-        doc = {
-            "name": name,
-            "message": message,
-            "created_at": datetime.datetime.utcnow(),
-        }
-        db.messages.insert_one(doc)
-        return redirect(url_for("home"))
+    doc = {
+        "name": name,
+        "message": message,
+        "created_at": datetime.datetime.utcnow(),
+    }
+    db.messages.insert_one(doc)
+    return redirect(url_for("home"))
 
     # let a client edit existing data, like on the profile or gallery pages
     @app.route("/edit/<post_id>")
