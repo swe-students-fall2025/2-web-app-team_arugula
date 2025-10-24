@@ -2,6 +2,7 @@ import os
 import json
 import datetime
 import logging
+import gridfs
 from flask_pymongo import PyMongo
 from pymongo import MongoClient
 from bson import ObjectId
@@ -29,6 +30,8 @@ client = pymongo.MongoClient(os.getenv("MONGO_URI"))
 db = client[os.getenv("MONGO_DB")]
 users_collection = db["users"]
 photos_collection = db["photos"]
+photos_collection.create_index([('location', '2dsphere')])
+fs = gridfs.GridFS(db)
 
 # client logs in 
 login_manager = LoginManager()
@@ -44,13 +47,13 @@ class User(UserMixin):
         
 @login_manager.user_loader
 def load_user(user_id):
-    user_data = users.find_one({"_id": ObjectId(user_id)})
+    user_data = users_collection.find_one({"_id": ObjectId(user_id)})
     if user_data:
         return User(user_data)
     return None
 
 def load_username(username):
-    user_data = users.find_one({"username": username})
+    user_data = users_collection.find_one({"username": username})
     if user_data:
         return User(user_data)
     return None
@@ -117,53 +120,176 @@ def logout():
 # your home page has your "Welcome [username]!", profile picture, and a gallery of pictures of plants/animals you took
 # Write python code to get photos you have posted, and for your feed page, get photos that your friends have posted
 # Get images from MongoDB, display them with HTML and CSS
-@app.route("/profile", methods=['GET', 'POST])
+
+# profile page lets you change your username, password, email, privacy settings, click save button to finalize changes
+@app.route("/profile")
 @login_required
 def profile():
-                                
+    if request.method == "POST":
+        new_username = request['username']
+        new_email = request['email']
+        new_password = request['password']
+        update = {}
+        if new_username:
+            update["username"] = new_username
+        if new_email:
+            update["email"] = new_email
+        if new_password:
+            update["password_hash"] = generate_password_hash(new_password)
+        if update:
+            users_collection.update_one({"_id": ObjectId(current_user.id)}, {"$set": update})
+            flash("Profile updated!")
+    user_data = users_collection.find_one({"_id": ObjectId(current_user.id)})
+    return render_template("your_profile.html", user=user_data)
+
 # let a client add data to database like photos, then return them to the home page
-@app.route("/create", methods=["POST"])
-def create_post():
-    name = request.form["fname"]
-    message = request.form["fmessage"]
-        
-    doc = {
-        "name": name,
-        "message": message,
-        "created_at": datetime.datetime.utcnow(),
-    }
-    db.messages.insert_one(doc)
-    return redirect(url_for("home"))
-
-    # let a client edit existing data, like on the profile or gallery pages
-    @app.route("/edit/<post_id>")
-    def edit(post_id):
-        doc = db.messages.find_one({"_id": ObjectId(post_id)})
-        return render_template("edit.html", doc=doc)
-        
-    @app.route("/edit/<post_id>", methods=["POST"])
-    def edit_post(post_id):
-        name = request.form["fname"]
-        message = request.form["fmessage"]
-        doc = {
-            "name": name,
-            "message": message,
+@app.route("/upload", methods=["GET", "POST"])
+@login_required
+def upload():
+    if request.method == "POST":
+        file = request.files["image"]
+        species = request.form["species"]
+        latitude = request.form["latitude"]
+        longitude = request.form["longitude"]
+        if not file or not species or not latitude or not longitude:
+            flash("Oopsie poopsie! Missing image")
+            return redirect(url_for("upload"))
+        data = file.read()
+        if len(data) > UPLOAD_MAX_BYTES:
+            flash("Oopsie poopsie! :( File too big!")
+            return redirect(url_for("upload"))
+        if not allowed_image(data):
+            flash("Oopsie poopsie! :( We don't allow that type of images!")
+            return redirect(url_for("upload"))
+        filename = secure_filename(file.filename)
+        file_id = fs.put(data, filename=filename, contentType=file.mimetype, uploaded_by=ObjectId(current_user.id))
+        image_data = {
+            "uploader_id": ObjectId(current_user.id),
+            "uploader_username": current_user.username,
+            "species": species,
+            "image_fs_id": file_id,
             "created_at": datetime.datetime.utcnow(),
+            "location": {
+                "type": "Point",
+                "coordinates": [float(latitude), float(longitude)]
+            }
         }
-        db.messages.update_one({"_id": ObjectId(post_id)}, {"$set": doc})
-        return redirect(url_for("home"))
+        photos_collection.insert_one(image_data)
+        flash("Yipee-ai-oh-kay-ay! :D Successfully uploaded another photo! Gotta catch 'em all!")
+        return redirect(url_for("your_observations"))
+    return render_template("upload.html")
 
-    # let a client delete a record
-    @app.route("/delete/<post_id>")
-    def delete(post_id):
-        db.messages.delete_one({"_id": ObjectId(post_id)})
-        return redirect(url_for("home"))
+# get images
+@app.route("/image/<img_id>")
+def get_image(img_id):
+    try:
+        grid_out = fs.get(ObjectId(img_id))
+    except Exception:
+        return "Not found", 404
+    return send_file(BytesIO(grid_out.read()), mimetype=grid_out.content_type, download_name=grid_out.filename)
+    
+# gallery page
+@app.route("/my_observations")
+@login_required
+def your_observations():
+    obs = list(db.observations.find({"uploader_id": ObjectId(current_user.id)}).sort("created_at", -1))
+    return render_template("your_observations.html", observations=obs)
 
-    # let a client delete a record according to author and contents of post
-    @app.route("/delete-by-content/<post_name>/<post_message>", methods=["POST"])
-    def delete_by_content(post_name, post_message):
-        db.messages.delete_many({"name": post_name, "message": post_message})
-        return redirect(url_for("home"))
+# your feed page lets you search someone's username, or a plant/animal name, and it returns relevant photos from that username or of that species
+# feed page shows a map of where a species' photo was taken
+@app.route("/feed")
+@login_required
+def feed():
+    return render_template("feed.html")
+
+# get coordinates of observations, plus species and username of uploader
+@app.route("/api/observations")
+def api_observations():
+    species = request.args.get("species")
+    username = request.args.get("username")
+    q = {}
+    if species:
+        q["species"] = {"$regex": species, "$options": "i"}
+    if username:
+        q["uploader_username"] = {"$regex": username, "$options": "i"}
+    docs = photos_collection.find(q)
+    features = []
+    for d in docs:
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "id": str(d["_id"]),
+                "species": d.get("species"),
+                "uploader": d.get("uploader_username"),
+                "image_url": url_for("get_image", img_id=str(d["image_fs_id"]))
+            },
+            "geometry": d.get("location")
+        })
+    return jsonify({
+        "type": "FeatureCollection",
+        "features": features
+    })
+
+# search for user or images of species
+@app.route("/search", methods=["GET"])
+@login_required
+def search():
+    q = request.args.get("q", "")
+    results = []
+    if q:
+        results = list(photos_collection.find({
+            "$or": [
+                {"species": {"$regex": q, "$options": "i"}},
+                {"uploader_username": {"$regex": q, "$options": "i"}}
+            ]
+        }))
+    return render_template("search_others_observations.html", observations=results, q=q)
+    
+# encyclopedia page lists all the species you've taken photos of, and each of their biological information 
+# encyclopedia will quote Wikipedia or Encyclopedia Britannica
+@app.route("/encyclopedia/<species>")
+def encyclopedia(species):
+    encyclopedia_collection = db['encyclopedia']
+    species_data = encyclopedia_collection.find_one({"species": species})
+    if not species_data or (datetime.datetime.utcnow() - doc["cached_at"]).days > 30:
+        summary = get_wikipedia(species)
+        if not summary:
+            return render_template("encyclopedia.html", species=species, summary="Sorry! No info found.")
+        species_data = {
+            "species": species,
+            "summary": summary,
+            "cached_at": datetime.datetime.utcnow()
+        }
+        encyclopedia_collection.update_one({"species": species}, {"$set": doc}, upsert=True)
+    return render_template("encyclopedia.html", species=species, summary=doc["summary"])
+
+def get_wikipedia(species):
+    try:
+        res = requests.get(
+            f"https://en.wikipedia.org/api/rest_v1/page/summary/{species}",
+            timeout=5
+        )
+        if res.status_code == 200:
+            data = res.json()
+            return data.get("extract")  # plain text summary
+    except Exception as e:
+        print("Oopsie poopsie! :( Here's your error:", e)
+    return None 
+
+# home page contains only a few pictures, click on gallery link to view more pictures and all that you've taken
+@app.route("/")
+@login_required
+def home():
+    # show profile summary + gallery preview
+    recent = list(db.observations.find({"uploader_id": ObjectId(current_user.id)}).sort("created_at", -1).limit(8))
+    return render_template("home.html", recent=recent)
+
+
+if __name__ == "__main__":
+    FLASK_PORT = os.getenv("FLASK_PORT", "5000")
+    FLASK_ENV = os.getenv("FLASK_ENV")
+    print(f"FLASK_ENV: {FLASK_ENV}, FLASK_PORT: {FLASK_PORT}")
+    app.run(debug=True, port=FLASK_PORT)
 
     # if client cannot connects to MongoDB, then take them to error page 
     @app.errorhandler(Exception)
@@ -171,32 +297,10 @@ def create_post():
         return render_template("error.html", error=e)
 
 
-# set the env variables
-if __name__ == "__main__":
-    FLASK_PORT = os.getenv("FLASK_PORT", "5000")
-    FLASK_ENV = os.getenv("FLASK_ENV")
-    print(f"FLASK_ENV: {FLASK_ENV}, FLASK_PORT: {FLASK_PORT}")
-
-    app.run(port=FLASK_PORT)
-
-
-# profile page lets you change your username, password, email, privacy settings, click save button to finalize changes
-
-# home page contains only a few pictures, click on gallery link to view more pictures and all that you've taken
-# gallery page
-
-# your feed page lets you search someone's username, or a plant/animal name, and it returns relevant photos from that username or of that species
-# feed page shows a map of where a species' photo was taken
-
-# encyclopedia page lists all the species you've taken photos of, and each of their biological information 
-# encyclopedia will quote Wikipedia or Encyclopedia Britannica
 
 
 
 
 
 
-
-
-# Implement required methods/properties from UserMixin
 
