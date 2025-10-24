@@ -58,12 +58,13 @@ def load_username(username):
         return User(user_data)
     return None
 
-# get the home page
+# home page contains only a few pictures, click on gallery link to view more pictures and all that you've taken
 @app.route("/")
+@login_required
 def home():
-    docs = db.messages.find({}).sort("created_at", -1)
-    return render_template("home.html", docs=docs)
-
+    # show profile summary + gallery preview
+    recent = list(db.observations.find({"uploader_id": ObjectId(current_user.id)}).sort("created_at", -1).limit(8))
+    return render_template("home.html", recent=recent)
 # get the username and password from login.html
 # check if it's the right combination in the MongoDB database
 # if yes, then login is successful, take user to home.html
@@ -275,14 +276,6 @@ def get_wikipedia(species):
     except Exception as e:
         print("Oopsie poopsie! :( Here's your error:", e)
     return None 
-
-# home page contains only a few pictures, click on gallery link to view more pictures and all that you've taken
-@app.route("/")
-@login_required
-def home():
-    # show profile summary + gallery preview
-    recent = list(db.observations.find({"uploader_id": ObjectId(current_user.id)}).sort("created_at", -1).limit(8))
-    return render_template("home.html", recent=recent)
 
 
 if __name__ == "__main__":
