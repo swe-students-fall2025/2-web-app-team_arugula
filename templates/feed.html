@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Media feed</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>#map { height: 80vh; }</style>
+  </head>
+  <body>
+    <h1>Observations map</h1>
+    <input id="search" placeholder="Search species or user">
+    <button id="go">Search</button>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      const map = L.map('map').setView([0,0], 2);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      async function load(q='') {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        // Note: our API uses species/username filters by query params; adjust if needed
+        const res = await fetch('/api/observations' + (q ? '?species=' + encodeURIComponent(q) : ''));
+        const geojson = await res.json();
+        if (window._layer) map.removeLayer(window._layer);
+        window._layer = L.geoJSON(geojson, {
+          onEachFeature: (feat, layer) => {
+            const p = feat.properties;
+            layer.bindPopup(`<b>${p.species}</b><br/>by ${p.uploader}<br/><img src="${p.image_url}" width="200">`);
+          }
+        }).addTo(map);
+        if (geojson.features.length) {
+          const coords = geojson.features.map(f => [f.geometry.coordinates[1], f.geometry.coordinates[0]]);
+          map.fitBounds(coords);
+        }
+      }
+
+      document.getElementById("go").addEventListener("click", () => {
+        const q = document.getElementById("search").value.trim();
+        load(q);
+      });
+
+      load();
+    </script>
+  </body>
+</html>
