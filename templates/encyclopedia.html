@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ species }} | Encyclopedia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-green-50">
+    <nav class="bg-green-700 text-white p-4 flex justify-between">
+      <a href="{{ url_for('home') }}" class="font-bold text-xl">Brave Gnu World</a>
+      <a href="{{ url_for('feed') }}" class="underline">Back to Map</a>
+    </nav>
+
+    <main class="max-w-3xl mx-auto p-6 bg-white rounded shadow mt-6">
+      <h1 class="text-3xl font-bold mb-4">{{ species }}</h1>
+      {% if summary %}
+        <p class="leading-relaxed text-gray-800 whitespace-pre-line">{{ summary }}</p>
+      {% else %}
+        <p>No encyclopedia entry found for this species.</p>
+      {% endif %}
+    </main>
+  </body>
+</html>
