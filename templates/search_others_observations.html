@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Search Observations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50">
+    <nav class="bg-green-700 text-white p-4 flex justify-between">
+      <a href="{{ url_for('home') }}" class="font-bold text-xl">Citizen Science</a>
+      <a href="{{ url_for('feed') }}" class="underline">Back to Feed</a>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-6">
+      <form method="get" class="flex gap-2 mb-6">
+        <input name="q" value="{{ q }}" placeholder="Search species or username" class="flex-grow p-2 border rounded">
+        <button class="bg-green-600 text-white px-4 rounded">Search</button>
+      </form>
+
+      {% if observations %}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {% for obs in observations %}
+            <div class="bg-white p-2 rounded shadow">
+              <img src="{{ url_for('get_image', img_id=str(obs['image_fs_id'])) }}" class="w-full h-40 object-cover rounded">
+              <p class="mt-1 font-medium">{{ obs['species'] }}</p>
+              <p class="text-sm text-gray-500">by {{ obs['uploader_username'] }}</p>
+              <a href="{{ url_for('encyclopedia', species=obs['species']) }}" class="text-green-700 text-sm underline">Read about species</a>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>No results found.</p>
+      {% endif %}
+    </main>
+  </body>
+</html>
