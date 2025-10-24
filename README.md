@@ -51,26 +51,15 @@ MONGO_URI=mongodb://localhost:27017/brave_gnu_world
 SECRET_KEY=change-this
 
 ```
-3. Run the app using dockerfile. Make a dockerfile, build, and run:
+3. Run the app using Docker Compose:
 ```
-FROM python:3.10
-WORKDIR /app
-COPY . /app
-RUN pip install -r requirements.txt
-EXPOSE 5000
-CMD ["flask", "run", "--host=0.0.0.0"]
-
-docker build -t test-brave-gnu-world .
-docker run -d -p 5000:5000 --name brave-gnu-world test-brave-gnu-world
+docker compose up --build
 ```
 Open the app with http://localhost:5000.
 
-4. You can stop the container or deactivate the virtual environment:
+4. You can stop the container and the virtual environment:
 ```
-docker stop citizen-science
-docker rm citizen-science
-
-deactivate
+docker compose down
 ```
 
 ## Task boards
