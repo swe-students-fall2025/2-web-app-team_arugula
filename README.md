@@ -36,16 +36,43 @@ Our goal is to make a fun interactive citizen science app for people to explore 
 
 ## Steps necessary to run the software
 
-1. Clone the git repository:
-'git clone'
-2. Set up pip and environment variables
-3. Run the app
-   ```
-   pip install -r requirements.txt
-   flask run
-   ```
-5. Stop the app by
+1. It's recommended that you  use Docker Desktop. Make a virtual environment and install dependencies:
+```
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt          
+```
+2. First, copy the env.example, and edit these values:
+```
+copy env.example .env
+FLASK_APP=app.py
+FLASK_ENV=development
+MONGO_URI=mongodb://localhost:27017/brave_gnu_world
+SECRET_KEY=change-this
+
+```
+3. Run the app using dockerfile. Make a dockerfile, build, and run:
+```
+FROM python:3.10
+WORKDIR /app
+COPY . /app
+RUN pip install -r requirements.txt
+EXPOSE 5000
+CMD ["flask", "run", "--host=0.0.0.0"]
+
+docker build -t test-brave-gnu-world .
+docker run -d -p 5000:5000 --name brave-gnu-world test-brave-gnu-world
+```
+Open the app with http://localhost:5000.
+
+4. You can stop the container or deactivate the virtual environment:
+```
+docker stop citizen-science
+docker rm citizen-science
+
+deactivate
+```
 
 ## Task boards
-
-See instructions. Delete this line and place a link to the task boards here.
+Not applicable, I had to do most of the work myself, with some guidance from Hetal and Suraj. I also consulted some classmates not part of my team
+for help writing appropriate commands and syntax.
