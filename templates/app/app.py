@@ -90,7 +90,7 @@ def register():
         user = User(record.inserted_id)
         login_user(user)
         return redirect(url_for('home'))
-    return render_template('login.html')
+    return render_template('login.html', register=True)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -106,7 +106,7 @@ def login():
         else:
             flash("Oopsie poopsie! :( Incorrect username or password (or both!)")
             return redirect(url_for('login'))
-    return render_template('login.html')
+    return render_template('login.html', register=False)
 
 @app.route('/logout')
 @login_required
