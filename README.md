@@ -40,7 +40,11 @@ Our goal is to make a fun interactive citizen science app for people to explore 
 'git clone'
 2. Set up pip and environment variables
 3. Run the app
-4. Stop the app by
+   ```
+   pip install -r requirements.txt
+   flask run
+   ```
+5. Stop the app by
 
 ## Task boards
 
