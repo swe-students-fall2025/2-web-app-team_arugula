@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Upload observation</title>
+  </head>
+  <body>
+    <h1>Show the world your stuff! Upload your beautiful photo here:</h1>
+    <form method="post" enctype="multipart/form-data">
+      <label>Image: <input type="file" name="image" accept="image/*" required></label><br>
+      <label>Species: <input name="species" required></label><br>
+      <label>Latitude: <input id="latitude" name="latitude" required></label><br>
+      <label>Longitude: <input id="longitude" name="longitude" required></label><br>
+      <button type="submit">Upload to let the whole world see!</button>
+    </form>
+
+    <button id="geo">Use my location</button>
+    <script>
+      document.getElementById("geo").addEventListener("click", () => {
+        if (!navigator.geolocation) return alert("Geolocation not supported");
+        navigator.geolocation.getCurrentPosition((pos) => {
+          document.getElementById("latitude").value = pos.coords.latitude;
+          document.getElementById("longitude").value = pos.coords.longitude;
+        }, (err) => alert("Could not get location: " + err.message));
+      });
+    </script>
+  </body>
+</html>
