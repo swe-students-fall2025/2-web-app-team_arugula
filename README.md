@@ -38,7 +38,7 @@ Our goal is to make a fun interactive citizen science app for people to explore 
 
 1. It's recommended that you  use Docker Desktop. First clone and navigate to the repo. Make a virtual environment and install dependencies:
 ```
-git clone https://github.com/Coffee859/2-web-app-team_arugula
+git clone https://github.com/swe-students-fall2025/2-web-app-team_arugula
 cd 2-web-app-team_arugula
 python -m venv venv
 .\venv\Scripts\activate
