@@ -26,10 +26,10 @@ config = dotenv_values()
 app.config.from_mapping(config)
 
 # get the client, and the database
-client = pymongo.MongoClient(os.getenv("MONGO_URI"))
-db = client[os.getenv("MONGO_DB")]
-users_collection = db["users"]
-photos_collection = db["photos"]
+client = MongoClient(os.getenv("MONGO_URI"))
+db = client[os.getenv("MONGO_DBNAME")]
+users_collection = db['users']
+photos_collection = db['photos']
 photos_collection.create_index([('location', '2dsphere')])
 fs = gridfs.GridFS(db)
 
@@ -76,22 +76,22 @@ def register():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
-        password_hash = generate_password_hash(password)
         
-        user_data = users_collection.find_one({'username': username})
-        if user_data:
-            flash("Oopsie poopsie! :( That username's taken!")
-            return redirect(url_for('register'))
-        record = users_collection.insert_one({
+        check_user = users_collection.find_one({'email': email})
+        if check_user:
+            return "Oopsie poopsie! :( That username's taken!"
+
+        password_hash = generate_password_hash(password)
+        user = {
             "username": username,
             "email": email,
-            "password_hash": password_hash,
-            "created_at": datetime.datetime.utcnow()
-        })
+            "password": password_hash
+        }
+        record = users_collection.insert_one(user)
         user = User(record.inserted_id)
         login_user(user)
         return redirect(url_for('home'))
-    return render_template('login.html', register=True)
+    return render_template('register.html', register=True)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -101,13 +101,12 @@ def login():
         
         user_data = users_collection.find_one({'username': username})
         if user_data and check_password_hash(user_data['password'], password):
-            user = User(user_data)
+            user = User(user_data['_id'])
             login_user(user)
             return redirect(url_for('home'))
         else:
-            flash("Oopsie poopsie! :( Incorrect username or password (or both!)")
-            return redirect(url_for('login'))
-    return render_template('login.html', register=False)
+            return "Oopsie poopsie! :( Incorrect username or password (or both!)"
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required

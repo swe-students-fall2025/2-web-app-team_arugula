@@ -7,9 +7,12 @@ services:
     env_file: .env
     depends_on:
       - mongo
+    volumes:
+      - .:/app
+    command: flask run --host=0.0.0.0
 
   mongo:
-    image: mongo:latest
+    image: mongo:4.4
     container_name: brave-gnu-world-db
     restart: always
     ports:
