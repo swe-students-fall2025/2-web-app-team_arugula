@@ -40,10 +40,10 @@ login_manager.login_view = 'login'
 
 class User(UserMixin):
     def __init__(self, user_data):
-        self.user_data = user_data
         self.id = str(user_data['_id'])
         self.username = user_data['username']
         self.email = user_data['email']
+        self.password_hash = user_data['password']
         
 @login_manager.user_loader
 def load_user(user_id):
@@ -79,33 +79,36 @@ def register():
         
         check_user = users_collection.find_one({'email': email})
         if check_user:
-            return "Oopsie poopsie! :( That username's taken!"
+            flash("Oopsie poopsie! :( That username's taken!")
+            return redirect(url_for('register'))
 
         password_hash = generate_password_hash(password)
-        user = {
+        user_doc = {
             "username": username,
             "email": email,
             "password": password_hash
         }
-        record = users_collection.insert_one(user)
-        user = User(record.inserted_id)
-        login_user(user)
+        users_collection.insert_one(user_doc)
+        user_data = users_collection.find_one({'email': email})
+        login_user(User(user_data))
         return redirect(url_for('home'))
     return render_template('register.html', register=True)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username')
+        password = request.form.get('password')
         
         user_data = users_collection.find_one({'username': username})
+        
         if user_data and check_password_hash(user_data['password'], password):
-            user = User(user_data['_id'])
+            user = User(user_data)
             login_user(user)
             return redirect(url_for('home'))
         else:
-            return "Oopsie poopsie! :( Incorrect username or password (or both!)"
+            flash("Oopsie poopsie! :( Incorrect username or password (or both!)")
+            return redirect(url_for('login'))
     return render_template('login.html')
 
 @app.route('/logout')
